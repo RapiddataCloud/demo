@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mendix-app-service
+  labels:
+    app: mendix-k8s
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 32000
+  selector:
+    app: mendix-k8s
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mendix-k8s-stateful
+  labels:
+    app: mendix-k8s
+spec:
+  serviceName: mendix-app-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mendix-k8s
+  template:
+    metadata:
+      labels:
+        app: mendix-k8s
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: mendix-app
+          image: mendix.rapidhr.com/mendix/app:1
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: data
+              mountPath: "/opt/mendix/build/data/files"
+          resources:
+            limits:
+              cpu: "1"
+              memory: "4Gi"
+            requests:
+              cpu: "0.5"
+              memory: "1Gi"
+          lifecycle:
+                postStart:
+                   exec:
+                     command: ["/bin/sh", "-c", "chmod -R 777 /var/lib/nginx"]
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx4g"
+            - name: HEAP_SIZE
+              value: "4096M"
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: admin-password
+            - name: ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: admin-user
+            - name: DEBUGGER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: debugger-password
+            - name: DATABASE_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: db-endpoint
+            - name: LICENSE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: license-id
+            - name: LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: license-key
+            - name: MXRUNTIME_DatabaseType
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: DatabaseType
+            - name: MXRUNTIME_DatabaseUserName
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: DatabaseUserName
+            - name: MXRUNTIME_DatabasePassword
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: DatabasePassword
+            - name: MXRUNTIME_DatabaseName
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: DatabaseName
+            - name: MXRUNTIME_DatabaseJdbcUrl
+              valueFrom:
+                secretKeyRef:
+                  name: mendix-app-secrets
+                  key: DatabaseJdbcUrl
+            - name: MXRUNTIME_SessionTimeout
+              value: "900000"
+            - name: MXRUNTIME_LongLivedSessionTimeout
+              value: "900000"
+            - name: MXRUNTIME_http.client.CleanupAfterSeconds
+              value: "150"
+            - name: MXRUNTIME_http.client.MaxConnectionsPerRoute
+              value: "150"
+            - name: MXRUNTIME_http.client.MaxConnectionsTotal
+              value: "150"
+            - name: MXRUNTIME_EnableKeepAlive
+              value: "false"
+      imagePullSecrets:
+        - name: regcred
+      volumes:
+        - hostPath:
+            path: "/home/docker/mendix-files"
+          name: data
